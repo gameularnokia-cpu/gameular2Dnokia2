@@ -1,1 +1,22 @@
-
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game - Nokia Style 🍎</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="score" id="score">SKOR: 0</div>
+        <div class="game-over" id="gameOver">GAME OVER! 🍎 Tekan MULAI untuk main lagi</div>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div class="controls">
+            <p>📱 WASD / Panah / Swipe untuk gerak | SPACE untuk pause</p>
+        </div>
+        <button id="startBtn">MULAI GAME</button>
+        <button id="pauseBtn" disabled>PAUSE</button>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
