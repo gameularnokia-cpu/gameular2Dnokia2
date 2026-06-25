@@ -29,7 +29,7 @@ window.onload = function() {
     bgAudio.loop = true;
     bgAudio.volume = 0.25;
     // Yaa Allah
-    const eatAudio = new Audio('media/collect.mp3');
+    const eatAudio = new Audio('media/Collect.mp3');
     eatAudio.volume = 0.6;
 
     function startMusic() {
