@@ -15,10 +15,33 @@ window.onload = function() {
     let food = {x: 0, y: 0};
     let dx = 0;
     let dy = 0;
+    // input guard: one direction change per frame
+    let nextDx = 0, nextDy = 0;
+    let lastDx = 0, lastDy = 0;
     let score = 0;
     let gameRunning = false;
     let gamePaused = false;
     let gameInterval;
+    let snakeHue = 120; // start green
+
+    // Audio using WAV files in media/ (background music and eat sound)
+    const bgAudio = new Audio('media/song.mp3');
+    bgAudio.loop = true;
+    bgAudio.volume = 0.25;
+    const eatAudio = new Audio('media/collect.wav');
+    eatAudio.volume = 0.6;
+
+    function startMusic() {
+        // Play returns a promise; swallow errors (e.g., autoplay blocked) but startGame is a user gesture so should succeed
+        bgAudio.currentTime = 0;
+        bgAudio.play().catch(()=>{});
+    }
+    function stopMusic() {
+        try { bgAudio.pause(); bgAudio.currentTime = 0; } catch(e) {}
+    }
+    function playEatSound() {
+        try { eatAudio.currentTime = 0; eatAudio.play().catch(()=>{}); } catch(e) {}
+    }
 
     // Random food position
     function randomFood() {
@@ -72,16 +95,20 @@ window.onload = function() {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        const headColor = `hsl(${snakeHue}, 100%, 55%)`;
+        const shadowColor = `hsla(${snakeHue}, 100%, 70%, 0.7)`;
+
         // Draw snake body
-        ctx.fillStyle = '#00ff00';
         for (let i = 1; i < snake.length; i++) {
+            const segmentHue = (snakeHue + i * 5) % 360;
+            ctx.fillStyle = `hsl(${segmentHue}, 100%, 45%)`;
             ctx.fillRect(snake[i].x * gridSize, snake[i].y * gridSize, gridSize - 2, gridSize - 2);
         }
 
         // Draw snake head
-        ctx.shadowColor = '#00ff00';
+        ctx.shadowColor = shadowColor;
         ctx.shadowBlur = 10;
-        ctx.fillStyle = '#00cc00';
+        ctx.fillStyle = headColor;
         ctx.fillRect(snake[0].x * gridSize, snake[0].y * gridSize, gridSize - 2, gridSize - 2);
         ctx.shadowBlur = 0;
 
@@ -105,6 +132,10 @@ window.onload = function() {
 
     // Move snake
     function moveSnake() {
+        // Apply pending direction once per frame
+        dx = nextDx;
+        dy = nextDy;
+
         const head = {
             x: snake[0].x + dx,
             y: snake[0].y + dy
@@ -126,10 +157,15 @@ window.onload = function() {
 
         snake.unshift(head);
 
+        // record applied direction (prevents instant double-reverse)
+        lastDx = dx; lastDy = dy;
+
         // Check food
         if (head.x === food.x && head.y === food.y) {
             score += 10;
             scoreElement.textContent = `SKOR: ${score}`;
+            playEatSound();
+            snakeHue = (snakeHue + 10) % 360;
             randomFood();
         } else {
             snake.pop();
@@ -147,9 +183,11 @@ window.onload = function() {
     // GLOBAL FUNCTIONS FOR onclick
     window.startGame = function() {
         snake = [{x: 10, y: 10}];
-        dx = 1;
-        dy = 0;
+        dx = 1; dy = 0;
+        nextDx = 1; nextDy = 0; // pending and initial direction
+        lastDx = 1; lastDy = 0; // last applied direction
         score = 0;
+        snakeHue = 120;
         gameRunning = true;
         gamePaused = false;
         gameOverElement.style.display = 'none';
@@ -161,12 +199,16 @@ window.onload = function() {
         randomFood();
         clearInterval(gameInterval);
         gameInterval = setInterval(gameLoop, 150);
+        // Start background music (user gesture)
+        startMusic();
     };
 
     window.pauseGame = function() {
         if (!gameRunning) return;
         gamePaused = !gamePaused;
         pauseBtn.textContent = gamePaused ? 'RESUME' : 'PAUSE';
+        if (gamePaused) { try { bgAudio.pause(); } catch(e) {} }
+        else { try { bgAudio.play().catch(()=>{}); } catch(e) {} }
     };
 
     window.gameOver = function() {
@@ -175,33 +217,33 @@ window.onload = function() {
         pauseBtn.disabled = true;
         pauseBtn.textContent = 'PAUSE';
         clearInterval(gameInterval);
+        stopMusic();
     };
 
     // Keyboard controls
     document.addEventListener('keydown', function(e) {
         if (!gameRunning) return;
-        
-        switch(e.key.toLowerCase()) {
+        const key = e.key.toLowerCase();
+        if (key === ' ') { e.preventDefault(); pauseGame(); return; }
+
+        // decide requested direction but don't apply it immediately
+        let ndx = nextDx;
+        let ndy = nextDy;
+        switch (key) {
             case 'a':
-            case 'arrowleft':
-                if (dx !== 1) { dx = -1; dy = 0; }
-                break;
+            case 'arrowleft': ndx = -1; ndy = 0; break;
             case 'w':
-            case 'arrowup':
-                if (dy !== 1) { dx = 0; dy = -1; }
-                break;
+            case 'arrowup': ndx = 0; ndy = -1; break;
             case 'd':
-            case 'arrowright':
-                if (dx !== -1) { dx = 1; dy = 0; }
-                break;
+            case 'arrowright': ndx = 1; ndy = 0; break;
             case 's':
-            case 'arrowdown':
-                if (dy !== -1) { dx = 0; dy = 1; }
-                break;
-            case ' ':
-                e.preventDefault();
-                pauseGame();
-                break;
+            case 'arrowdown': ndx = 0; ndy = 1; break;
+            default: return;
+        }
+
+        // prevent reversing relative to last applied direction
+        if (!(ndx === -lastDx && ndy === -lastDy)) {
+            nextDx = ndx; nextDy = ndy;
         }
     });
 
@@ -221,12 +263,17 @@ window.onload = function() {
         const deltaX = e.changedTouches[0].clientX - touchStartX;
         const deltaY = e.changedTouches[0].clientY - touchStartY;
         
+        let ndx = nextDx, ndy = nextDy;
         if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 30) {
-            if (deltaX > 0 && dx !== -1) { dx = 1; dy = 0; }
-            else if (deltaX < 0 && dx !== 1) { dx = -1; dy = 0; }
+            if (deltaX > 0) { ndx = 1; ndy = 0; }
+            else if (deltaX < 0) { ndx = -1; ndy = 0; }
         } else if (Math.abs(deltaY) > 30) {
-            if (deltaY > 0 && dy !== -1) { dx = 0; dy = 1; }
-            else if (deltaY < 0 && dy !== 1) { dx = 0; dy = -1; }
+            if (deltaY > 0) { ndx = 0; ndy = 1; }
+            else if (deltaY < 0) { ndx = 0; ndy = -1; }
+        }
+        // prevent reversing relative to last applied direction
+        if (!(ndx === -lastDx && ndy === -lastDy)) {
+            nextDx = ndx; nextDy = ndy;
         }
     });
 
